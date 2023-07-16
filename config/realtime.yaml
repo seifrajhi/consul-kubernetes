@@ -1,0 +1,95 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redisapp
+  labels:
+    app: redis
+spec:
+  selector:
+    matchLabels:
+      app: redis
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:6.0-alpine3.18
+        resources:
+          requests:
+            cpu: 200m
+            memory: 100Mi
+        ports:
+        - containerPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redissvc
+  labels:
+    app: redis
+spec:
+  ports:
+  - port: 6379
+    targetPort: 6379
+  selector:
+    app: redis
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: realtimeapp
+  labels:
+    app: realtimeapp
+  annotations:
+    fluxcd.io/automated: 'true'
+    fluxcd.io/tag.realtimeapp: semver:~1
+spec:
+  selector:
+    matchLabels:
+      app: realtimeapp
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: realtimeapp
+    spec:
+      containers:
+      - name: realtimeapp
+        image: rajhisaifeddine/realtime-go-consul:1.0.0
+        env:
+        - name: REDISHOST
+          value: "redissvc:6379"
+        - name: HOST_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.hostIP
+        - name: CONSUL_HTTP_ADDR
+          value: http://$(HOST_IP):8500
+        resources:
+          requests:
+            cpu: 25m
+            memory: 50Mi
+          limits:
+            cpu: 150m
+            memory: 150Mi
+        ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: realtimeapp
+  labels:
+    app: realtimeapp
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8080
+  selector:
+    app: realtimeapp
